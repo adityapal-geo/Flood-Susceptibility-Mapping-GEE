@@ -1,31 +1,20 @@
 
-// ----------------------------------------------------------------
-// STEP 1: DEFINE STUDY AREA - DAMODAR RIVER BASIN
 Map.centerObject(aoi, 8);
 Map.addLayer(aoi, {color: 'red'}, 'AOI Boundary', false);
 
-// ----------------------------------------------------------------
-// STEP 2: ELEVATION & SLOPE
-// ----------------------------------------------------------------
+
 var dem = ee.Image('USGS/SRTMGL1_003').clip(aoi);
 var elevation = dem.select('elevation');
 var slope = ee.Terrain.slope(dem);
 
-// ----------------------------------------------------------------
-// STEP 3: FLOW ACCUMULATION & TWI
-// ----------------------------------------------------------------
+
 var flowAcc = ee.Image('WWF/HydroSHEDS/15ACC').clip(aoi);
 var slopeRad = slope.multiply(Math.PI / 180);
 var twi = flowAcc.add(1).log()
             .subtract(slopeRad.tan().add(0.001).log())
             .rename('TWI');
 
-// ----------------------------------------------------------------
-// STEP 4: STREAM NETWORK & DISTANCE FROM RIVERS
-// Higher threshold used since this AOI includes hilly upper
-// catchment terrain (Chota Nagpur Plateau) - avoids flagging too
-// many minor channels as "rivers"
-// ----------------------------------------------------------------
+ 
 var streamThreshold = 1000;
 var streams = flowAcc.gt(streamThreshold).selfMask();
 
@@ -34,9 +23,7 @@ var distRivers = streams.fastDistanceTransform(256).sqrt()
                   .rename('distRivers')
                   .clip(aoi);
 
-// ----------------------------------------------------------------
-// STEP 5: RAINFALL (CHIRPS long-term mean)
-// ----------------------------------------------------------------
+
 var rainfall = ee.ImageCollection('UCSB-CHG/CHIRPS/PENTAD')
                 .filterDate('2015-01-01', '2023-12-31')
                 .filterBounds(aoi)
@@ -44,14 +31,10 @@ var rainfall = ee.ImageCollection('UCSB-CHG/CHIRPS/PENTAD')
                 .clip(aoi)
                 .rename('rainfall');
 
-// ----------------------------------------------------------------
-// STEP 6: LAND USE / LAND COVER (ESA WorldCover 2021)
-// ----------------------------------------------------------------
+
 var lulc = ee.ImageCollection("ESA/WorldCover/v200").first().clip(aoi);
 
-// ----------------------------------------------------------------
-// STEP 7: RECLASSIFY EACH FACTOR INTO SCORES (1 = low, 5 = high susceptibility)
-// ----------------------------------------------------------------
+
 
 // --- Elevation: lower = higher susceptibility ---
 var elevMin = ee.Number(elevation.reduceRegion({
@@ -115,9 +98,7 @@ var lulcScore = ee.Image(3)
   .where(lulcBand.eq(95), 4)   // Mangroves
   .rename('lulcScore');
 
-// ----------------------------------------------------------------
-// STEP 8: WEIGHTED OVERLAY
-// ----------------------------------------------------------------
+
 var w_elev  = 0.20;
 var w_slope = 0.15;
 var w_twi   = 0.15;
@@ -134,10 +115,8 @@ var fsi = elevScore.multiply(w_elev)
   .rename('FloodSusceptibilityIndex')
   .clip(aoi);
 
-// ----------------------------------------------------------------
-// STEP 9: CLASSIFY INTO 5 CLASSES USING QUANTILES (DATA-DRIVEN)
-// Each class gets ~20% of the AOI - balanced, no "all red" problem
-// ----------------------------------------------------------------
+ 
+
 var fsiPercentiles = fsi.reduceRegion({
   reducer: ee.Reducer.percentile([20, 40, 60, 80]),
   geometry: aoi,
@@ -160,18 +139,16 @@ var fsiClass = ee.Image(1)
   .rename('FSI_Class')
   .clip(aoi);
 
-// ----------------------------------------------------------------
-// STEP 10: VISUALIZE
-// ----------------------------------------------------------------
+
+
 var palette5 = ['#2b83ba', '#abdda4', '#ffffbf', '#fdae61', '#d7191c'];
 var legendLabels = ['Very Low', 'Low', 'Moderate', 'High', 'Very High'];
 
 Map.addLayer(fsi, {min: 1, max: 5, palette: palette5}, 'Flood Susceptibility Index (continuous)');
 Map.addLayer(fsiClass, {min: 1, max: 5, palette: palette5}, 'Flood Susceptibility Classes (1=Very Low, 5=Very High)');
 
-// ----------------------------------------------------------------
-// STEP 11: ADD LEGEND TO MAP
-// ----------------------------------------------------------------
+
+
 var legend = ui.Panel({
   style: {position: 'bottom-right', padding: '8px 15px', backgroundColor: 'white'}
 });
@@ -195,9 +172,8 @@ for (var i = 0; i < 5; i++) {
 }
 Map.add(legend);
 
-// ----------------------------------------------------------------
-// STEP 12: CALCULATE AREA OF EACH SUSCEPTIBILITY CLASS
-// ----------------------------------------------------------------
+
+
 var pixelArea = ee.Image.pixelArea();
 var areaImage = pixelArea.addBands(fsiClass);
 
@@ -262,9 +238,8 @@ var areaFeatures = ee.FeatureCollection(
 
 print('Flood Susceptibility - Area Summary Table:', areaFeatures);
 
-// ----------------------------------------------------------------
-// STEP 13: BAR CHART OF AREA BY CLASS
-// ----------------------------------------------------------------
+
+
 var chart = ui.Chart.feature.byFeature({
   features: areaFeatures,
   xProperty: 'Class_Name',
@@ -280,9 +255,8 @@ var chart = ui.Chart.feature.byFeature({
 
 print(chart);
 
-// ----------------------------------------------------------------
-// STEP 14: EXPORT RESULTS
-// ----------------------------------------------------------------
+ 
+
 Export.image.toDrive({
   image: fsiClass.toFloat(),
   description: 'Damodar_Flood_Susceptibility_Map',
