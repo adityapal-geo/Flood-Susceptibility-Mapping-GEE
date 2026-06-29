@@ -106,6 +106,6 @@ Department of Geography
 
 VISVA-BHARATI
 
-e Sensing
+
 - Google Earth Engine
 - Flood Hazard Mapping
